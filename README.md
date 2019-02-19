@@ -1,3 +1,18 @@
+# Installation:
+After downloading this script and env.ini 
+You can choose to install Mask-RcNN in any location. 
+clone Mask-RCNN from https://github.com/matterport/Mask_RCNN
+-- requires manual pip installation of Shapely.whl
+-- requires coco API via >>>> pip install git+https://github.com/philferriere/cocoapi.git#subdirectory=PythonAPI
+tested with
+-- python 3.6.7
+-- tensorflow 1.12.0
+-- NUMPY 1.16.0
+-- SCIKIT-IMAGE 0.14.2
+-- matplotlib 3.0.2
+
+
+
 # ChangeLog
 
 changes in autoAnn 29th Jan
@@ -17,10 +32,3 @@ ALL SILVER, in categories to SILVER
 	BUS, SILVER, -> BUS, SILVER
 	MVP, SILVER, -> MVP, SILVER
 	SEDAN, SILVER, -> "SEDAN, SILVER"
-
-# Installation:
-After downloading his script and env.ini 
-You can choose to install Mask-RcNN in any location. 
-clone Mask-RCNN from https://github.com/matterport/Mask_RCNN
--- requires manual pip installation of Shapely.whl
--- requires coco API via >>>> pip install git+https://github.com/philferriere/cocoapi.git#subdirectory=PythonAPI

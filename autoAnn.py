@@ -1,20 +1,15 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[1]:
-
-
 import cv2
 import os, sys
 import json
 import time
 import skimage.io
+import warnings
 import configparser
 import numpy as np
 import tensorflow as tf
-
-
-# In[2]:
 
 
 def getSectionToUse(config_dict):
@@ -28,8 +23,6 @@ def getSectionToUse(config_dict):
         print('Section_to_use not specified in env.ini. Using Default values.')
     return ini_section
 
-# In[3]:
-
 
 config_dict = configparser.ConfigParser()
 config_dict.read('env.ini')
@@ -38,8 +31,6 @@ RCNN_DIR = config_dict[ini_section]['RCNN_DIR']
 if not os.path.isdir(RCNN_DIR):
     raise NotADirectoryError(RCNN_DIR + " in env.ini is not a directory.")
 
-
-# In[4]:
 
 
 # SET UP RCNN LOGS AND COCO DEPENDENCIES 
@@ -60,8 +51,6 @@ from mrcnn import visualize
 sys.path.append(os.path.join(RCNN_DIR, "samples/coco/"))  # To find local version
 import coco
 
-
-# In[5]:
 
 
 def detectColour(image, aoi, threshold=0.3 ):
@@ -96,9 +85,6 @@ def detectColour(image, aoi, threshold=0.3 ):
     return "OTHERS", output
 
 
-# In[6]:
-
-
 def getImageIdfrmPath(path, case='oneMotoring'):
     image_id = ''
     # for onemotoring:
@@ -109,8 +95,6 @@ def getImageIdfrmPath(path, case='oneMotoring'):
         image_id = location.replace(' ', '_') + '-' + date + '-' + im.replace('.jpeg','')
     return image_id
 
-
-# In[7]:
 
 
 def initializeVariables(config_dict):
@@ -149,9 +133,6 @@ def get_lines_as_list(file_path):
     return lines_in_list
 
 
-# In[8]:
-
-
 # INITIALISATION OF VARIABLES
 jsonOutput, config_ = initializeVariables(config_dict)  # use config with underscore to prevent conflict with pyco's config
 OBJECTS_OF_INTEREST_ls = config_['obj_of_interest']
@@ -162,7 +143,6 @@ THRESHOLD = float(config_['threshold'])
 ANN_ID_PREFIX = config_['ann_id_prefix']
 OBJECTS_OF_INTEREST_ls = [ int(x) for x in OBJECTS_OF_INTEREST_ls.replace('[','').replace(']','').split(',')]
 done_list_path = config_['done_list']
-'BUS' in ', '.join([items['id'] for items in jsonOutput['categories']]).split(', ')
 ann_json_list = []
 if len(done_list_path) != 0:
     done_list = get_lines_as_list(done_list_path)
@@ -170,9 +150,6 @@ else:
     done_list = []
 global_counter = 1
 other_list = []
-
-
-# In[9]:
 
 
 # COCO Class names
@@ -193,13 +170,10 @@ ref_indices_to_be_removed = []
 for obj_ref_idx in OBJECTS_OF_INTEREST_ls:
     if not class_names[obj_ref_idx].lower() in categories_list:
         ref_indices_to_be_removed.append(obj_ref_idx)
-        print(class_names[obj_ref_idx])
 for i in ref_indices_to_be_removed:
     print('Removing ' + class_names[i] + ' from objects-of-interest list as it is not present in the category list of reference.json')
     OBJECTS_OF_INTEREST_ls.remove(i)
 
-
-# In[10]:
 
 
 # Directory to save logs and trained model
@@ -221,7 +195,6 @@ inf_config = InferenceConfig()
 inf_config.display()
 
 
-# In[ ]:
 
 list_of_image_paths = []
 assert os.path.isdir(IM_DIR), IM_DIR + " is an invalid image directory."
@@ -267,7 +240,7 @@ with tf.device(DEVICE):
 
         if len(image_array) == BATCH_SIZE:
             test_results = model.detect(image_array, verbose=0)
-        else:
+        elif len(image_array) != 0 :
             # initialise a model with the corresponding BATCH_SIZE
             config_new_config = InferenceConfig()
             config_new_config.BATCH_SIZE = len(image_array)
@@ -279,7 +252,8 @@ with tf.device(DEVICE):
             # Load weights trained on MS-COCO
             model_odd_batch_size.load_weights(COCO_MODEL_PATH, by_name=True)
             test_results = model_odd_batch_size.detect(image_array, verbose=0)
-
+        else:
+            break
         for ii in range(len(test_results)):
             r = test_results[ii]
             image_id = getImageIdfrmPath(image_path_array[ii])
@@ -329,6 +303,9 @@ with tf.device(DEVICE):
         print('Nothing detected.')
     else:
         jsonOutput['annotations'] = ann_json_list
+        if not output_file.endswith('.json'):
+            warnings.warn('Output file path given does not end with .json, adding .json to path.')
+            output_file = output_file + '.json'
         File = open(output_file,'w')
         File.write(json.dumps(jsonOutput))
         File.close()
