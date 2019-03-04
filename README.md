@@ -1,9 +1,10 @@
-# Installation:
+# Installation for AutoAnn.py:
 After downloading this script and env.ini 
 You can choose to install Mask-RcNN in any location. 
 clone Mask-RCNN from https://github.com/matterport/Mask_RCNN
--- requires manual pip installation of Shapely.whl
--- requires coco API via >>>> pip install git+https://github.com/philferriere/cocoapi.git#subdirectory=PythonAPI
+
+Edit env.ini accordingly and run python AutoAnn.py
+
 tested with
 -- python 3.6.7
 -- tensorflow 1.12.0
@@ -11,7 +12,8 @@ tested with
 -- SCIKIT-IMAGE 0.14.2
 -- matplotlib 3.0.2
 
-
+-- requires coco API via >>>> pip install git+https://github.com/philferriere/cocoapi.git#subdirectory=PythonAPI
+-- requires manual pip installation of Shapely.whl
 
 # ChangeLog
 

@@ -24,35 +24,6 @@ def getSectionToUse(config_dict):
     return ini_section
 
 
-config_dict = configparser.ConfigParser()
-config_dict.read('env.ini')
-ini_section = getSectionToUse(config_dict)
-RCNN_DIR = config_dict[ini_section]['RCNN_DIR']
-if not os.path.isdir(RCNN_DIR):
-    raise NotADirectoryError(RCNN_DIR + " in env.ini is not a directory.")
-
-
-
-# SET UP RCNN LOGS AND COCO DEPENDENCIES 
-# Directory to save logs and trained model
-MODEL_DIR = os.path.join(RCNN_DIR, "logs")
-print('Creating model')
-# Local path to trained weights file
-COCO_MODEL_PATH = os.path.join(RCNN_DIR, "mask_rcnn_coco.h5")
-# Download COCO trained weights from Releases if needed
-if not os.path.exists(COCO_MODEL_PATH):
-    utils.download_trained_weights(COCO_MODEL_PATH)
-    
-sys.path.append(os.path.abspath(RCNN_DIR))
-from mrcnn import utils
-import mrcnn.model as modellib
-from mrcnn import visualize
-# Import COCO config
-sys.path.append(os.path.join(RCNN_DIR, "samples/coco/"))  # To find local version
-import coco
-
-
-
 def detectColour(image, aoi, threshold=0.3 ):
     # define the list of boundaries
     boundaries = [ #RGB
@@ -125,6 +96,11 @@ def initializeVariables(config_dict):
         raise ValueError('Annotation id prefix, ann_id_prefix not found in env.ini')
     return jsonOutput, config_dict[ini_section]
 
+    if not config_dict.has_option(ini_section, 'model_path'):
+        raise ValueError('Model path not found in env.ini')
+    return jsonOutput, config_dict[ini_section]
+
+# GET SCRIPT CONFIGURATIONS FROM ENV.INI FILE
 def get_lines_as_list(file_path):
     File = open(file_path, 'r')
     lines = File.readlines()
@@ -132,6 +108,12 @@ def get_lines_as_list(file_path):
     File.close()
     return lines_in_list
 
+config_dict = configparser.ConfigParser()
+config_dict.read('env.ini')
+ini_section = getSectionToUse(config_dict)
+RCNN_DIR = config_dict[ini_section]['RCNN_DIR']
+if not os.path.isdir(RCNN_DIR):
+    raise NotADirectoryError(RCNN_DIR + " in env.ini is not a directory.")
 
 # INITIALISATION OF VARIABLES
 jsonOutput, config_ = initializeVariables(config_dict)  # use config with underscore to prevent conflict with pyco's config
@@ -143,6 +125,7 @@ THRESHOLD = float(config_['threshold'])
 ANN_ID_PREFIX = config_['ann_id_prefix']
 OBJECTS_OF_INTEREST_ls = [ int(x) for x in OBJECTS_OF_INTEREST_ls.replace('[','').replace(']','').split(',')]
 done_list_path = config_['done_list']
+COCO_MODEL_PATH = config_['model_path']
 ann_json_list = []
 if len(done_list_path) != 0:
     done_list = get_lines_as_list(done_list_path)
@@ -152,17 +135,34 @@ global_counter = 1
 other_list = []
 
 
+# SET UP RCNN LOGS, COCO DEPENDENCIES AND RCNN MODEL
+# Directory to save logs and trained model
+MODEL_DIR = os.path.join(RCNN_DIR, "logs")
+print('Creating model')
+# Download COCO trained weights from Releases if needed
+if not os.path.exists(COCO_MODEL_PATH):
+    utils.download_trained_weights(COCO_MODEL_PATH)
+
+sys.path.append(os.path.abspath(RCNN_DIR))
+from mrcnn import utils
+import mrcnn.model as modellib
+from mrcnn import visualize
+# Import COCO config
+sys.path.append(os.path.join(RCNN_DIR, "samples/coco/"))  # To find local version
+import coco
+
+
 # COCO Class names
+# OVERRIDES MASK_RCNN DEFAULTS
+class_names = ['BG', 'person', 'bicycle', 'SEDAN', 'motorcycle', 'airplane',
+               'bus', 'train', 'truck', 'boat', 'traffic light',
+               'fire hydrant', 'stop sign']
 # Index of the class in the list is its ID. For example, to get ID of
 # the teddy bear class, use: class_names.index('teddy bear')
 # class_names = ['BG', 'person', 'bicycle', 'car', 'motorcycle', 'airplane',
 #                'bus', 'train', 'truck', 'boat', 'traffic light',
 #                'fire hydrant', 'stop sign']
 
-# OVERRIDES MASK_RCNN DEFAULTS
-class_names = ['BG', 'person', 'bicycle', 'SEDAN', 'motorcycle', 'airplane',
-               'bus', 'train', 'truck', 'boat', 'traffic light',
-               'fire hydrant', 'stop sign']
 
 # REMOVES OBJECTS THAT ARE OF INTEREST BUT ARE NOT IN REFERENCE CATEGORY LIST
 categories_list = ', '.join([items['id'] for items in jsonOutput['categories']]).lower().split(', ')
@@ -175,16 +175,7 @@ for i in ref_indices_to_be_removed:
     OBJECTS_OF_INTEREST_ls.remove(i)
 
 
-
-# Directory to save logs and trained model
-MODEL_DIR = os.path.join(RCNN_DIR, "logs")
-
-# Local path to trained weights file
-COCO_MODEL_PATH = os.path.join(RCNN_DIR, "mask_rcnn_coco.h5")
-# Download COCO trained weights from Releases if needed
-if not os.path.exists(COCO_MODEL_PATH):
-    utils.download_trained_weights(COCO_MODEL_PATH)
-
+# SETUP COCO CONFIGURATIONS FOR MODEL
 class InferenceConfig(coco.CocoConfig):
     # Set batch size to 1 since we'll be running inference on
     # one image at a time. Batch size = GPU_COUNT * IMAGES_PER_GPU
@@ -195,27 +186,25 @@ inf_config = InferenceConfig()
 inf_config.display()
 
 
-
+# GET ALL IMAGES IN GIVEN DIRECTORY
 list_of_image_paths = []
-assert os.path.isdir(IM_DIR), IM_DIR + " is an invalid image directory."
+assert os.path.isdir(IM_DIR), IM_DIR + " is an invalid directory."
 
 for path, subdirs, files in os.walk(IM_DIR):
     for file in files:
-        if file.endswith('.jpeg'):
+        if (file.endswith('.jpeg') or file.endswith('.jpg') or file.endswith('.png')):
             list_of_image_paths.append(os.path.join(path, file))
 
-# MAIN
+# MAIN LOOP
 # Create model object in inference mode.
+# Tracks done images and images with objects not of interest,
+# in done_list.txt and strange_list.json respectively
 DEVICE = "/gpu:0"  # /cpu:0 or /gpu:0
 with tf.device(DEVICE):
     model = modellib.MaskRCNN(mode="inference", model_dir=MODEL_DIR, config=inf_config)
 
     # Load weights trained on MS-COCO
     model.load_weights(COCO_MODEL_PATH, by_name=True)
-
-    # MAIN
-    # TODO track done images and images with objects not of interest
-
 
     print('Found ' + str(len(list_of_image_paths)) + ' images.')
     im_generator = enumerate(list_of_image_paths)
@@ -232,7 +221,7 @@ with tf.device(DEVICE):
         image_path_array = []
         for i in range(BATCH_SIZE):
             try: im_counter, nxt_im_path = im_generator.__next__()
-            except StopIteration: end_of_list = True; break
+            except StopIteration: end_of_list = True; break  # end of image list reached
             image = skimage.io.imread(nxt_im_path)
             image_array.append(image)
             image_sz_array.append(image.shape)  # height, width, _ 
@@ -240,12 +229,12 @@ with tf.device(DEVICE):
 
         if len(image_array) == BATCH_SIZE:
             test_results = model.detect(image_array, verbose=0)
-        elif len(image_array) != 0 :
+        elif len(image_array) != 0 :  # CASE WHEN THE IMAGE ARRAY HAS IMAGES NEQ TO MODEL'S BATCH_SIZE
             # initialise a model with the corresponding BATCH_SIZE
             config_new_config = InferenceConfig()
             config_new_config.BATCH_SIZE = len(image_array)
             config_new_config.IMAGES_PER_GPU = len(image_array)
-            config_new_config.NAME = "coco_odd_size"
+            config_new_config.NAME = "coco_odd_size"  # to prevent model name conflict with main model
             config_new_config.display()
             # Create model object in inference mode.
             model_odd_batch_size = modellib.MaskRCNN(mode="inference", model_dir=MODEL_DIR, config=config_new_config)
